@@ -8,4 +8,4 @@ It aims to provide efficient and concurrent data storage and retrieval.
 * Support setting expiration time, and use less goroutines to clean up expired cache data
 
 **Note1: This project includes a dedicated testing branch for running test cases. Make sure to switch to that branch for testing purposes.**
-**Note2: I can only reopen a repository due to I can't fix enhance-cache's go get bug :( **
+**Note2: I can only reopen a repository due to I can't fix enhance-cache's go get bug :( .**
