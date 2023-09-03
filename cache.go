@@ -7,26 +7,26 @@ import (
 )
 
 var (
-	caches = make([]Cleanable, 0)
+	caches = make([]any, 0)
 	wakeup chan bool
 	lock   sync.Mutex
 	once   sync.Once
 )
 
 type Cleanable interface {
-	clean() (nextCleanTime time.Time)
+	Clean() (nextCleanTime time.Time)
 }
 
 type EnhanceCache[K string, V any] struct {
-	defaultExpiration time.Duration
-	nextScan          time.Time
-	items             sync.Map // just like map[string]*Item
-	eviction          func(key string, value V)
+	DefaultExpiration time.Duration
+	NextScan          time.Time
+	Items             sync.Map // just like map[string]*Item
+	Eviction          func(key string, value V)
 }
 
 type Item struct {
 	Object     any
-	status     int32
+	Status     int32
 	Expiration time.Time
 }
 
@@ -41,10 +41,10 @@ func NewCacheWithEviction[V any](expired time.Duration, eviction func(key string
 	})
 
 	cache := &EnhanceCache[string, V]{
-		items:             sync.Map{},
-		nextScan:          time.Now().Add(expired),
-		defaultExpiration: expired,
-		eviction:          eviction,
+		Items:             sync.Map{},
+		NextScan:          time.Now().Add(expired),
+		DefaultExpiration: expired,
+		Eviction:          eviction,
 	}
 
 	lock.Lock()
@@ -61,7 +61,7 @@ func NewCacheWithEviction[V any](expired time.Duration, eviction func(key string
 }
 
 func (ec *EnhanceCache[K, V]) Get(key string) (v V, exist bool) {
-	wrap, find := ec.items.Load(key)
+	wrap, find := ec.Items.Load(key)
 
 	if !find {
 		return
@@ -72,11 +72,11 @@ func (ec *EnhanceCache[K, V]) Get(key string) (v V, exist bool) {
 		return item.Object.(V), true
 	}
 
-	if atomic.CompareAndSwapInt32(&item.status, 0, 1) {
-		ec.items.Delete(key)
-		atomic.StoreInt32(&item.status, 2)
-		if ec.eviction != nil {
-			go ec.eviction(key, item.Object.(V))
+	if atomic.CompareAndSwapInt32(&item.Status, 0, 1) {
+		ec.Items.Delete(key)
+		atomic.StoreInt32(&item.Status, 2)
+		if ec.Eviction != nil {
+			go ec.Eviction(key, item.Object.(V))
 		}
 		return
 	}
@@ -85,8 +85,8 @@ func (ec *EnhanceCache[K, V]) Get(key string) (v V, exist bool) {
 	// extreme short time to wait, only trigger in stubbing test.
 	// Even if 1000 goroutine are create to execute,
 	// the wait will not be triggered.
-	for status := atomic.LoadInt32(&item.status); status != 2; {
-		status = atomic.LoadInt32(&item.status)
+	for status := atomic.LoadInt32(&item.Status); status != 2; {
+		status = atomic.LoadInt32(&item.Status)
 	}
 
 	return
@@ -98,17 +98,13 @@ func (ec *EnhanceCache[K, V]) Delete(key string) {
 		return
 	}
 
-	ec.items.Delete(key)
-	if ec.eviction != nil {
-		go ec.eviction(key, value)
+	ec.Items.Delete(key)
+	if ec.Eviction != nil {
+		go ec.Eviction(key, value)
 	}
 }
 
-func (ec *EnhanceCache[K, V]) Set(key string, value V) {
-	ec.SetWithExpiration(key, value, ec.defaultExpiration)
-}
-
-func (ec *EnhanceCache[K, V]) SetWithExpiration(key string, value V, expiration time.Duration) {
+func (ec *EnhanceCache[K, V]) Set(key string, value V, expiration time.Duration) {
 	ec.Get(key)
 
 	item := &Item{
@@ -116,7 +112,7 @@ func (ec *EnhanceCache[K, V]) SetWithExpiration(key string, value V, expiration 
 		Expiration: time.Now().Add(expiration),
 	}
 
-	ec.items.Store(key, item)
+	ec.Items.Store(key, item)
 }
 
 func (ec *EnhanceCache[K, V]) LoadOrStore(key string, value V) (V, bool) {
@@ -126,10 +122,10 @@ func (ec *EnhanceCache[K, V]) LoadOrStore(key string, value V) (V, bool) {
 
 	item := &Item{
 		Object:     value,
-		Expiration: time.Now().Add(ec.defaultExpiration),
+		Expiration: time.Now().Add(ec.DefaultExpiration),
 	}
 
-	warp, load := ec.items.LoadOrStore(key, item)
+	warp, load := ec.Items.LoadOrStore(key, item)
 	item = warp.(*Item)
 	return item.Object.(V), load
 }
@@ -188,31 +184,31 @@ func (ec *EnhanceCache[K, V]) IncrInt(key string, value interface{}) (current V)
 	}
 }
 
-func (ec *EnhanceCache[K, V]) clean() (nextCleanTime time.Time) {
-	if ec.nextScan.After(time.Now()) {
-		return ec.nextScan
+func (ec *EnhanceCache[K, V]) Clean() (nextCleanTime time.Time) {
+	if ec.NextScan.After(time.Now()) {
+		return ec.NextScan
 	}
-	ec.items.Range(func(key, value any) bool {
+	ec.Items.Range(func(key, value any) bool {
 		ec.Get(key.(string))
 		return true
 	})
-	ec.nextScan = time.Now().Add(ec.defaultExpiration)
-	return ec.nextScan
+	ec.NextScan = time.Now().Add(ec.DefaultExpiration)
+	return ec.NextScan
 }
 
 func (ec *EnhanceCache[K, V]) Clear() {
-	ec.items = sync.Map{}
+	ec.Items = sync.Map{}
 }
 
 func (ec *EnhanceCache[K, V]) SetWithEviction(evictionFunc func(key string, value V)) {
 	lock.Lock()
-	ec.eviction = evictionFunc
+	ec.Eviction = evictionFunc
 	lock.Unlock()
 }
 
 func (ec *EnhanceCache[K, V]) Size() int {
 	size := 0
-	ec.items.Range(func(key, value any) bool {
+	ec.Items.Range(func(key, value any) bool {
 		_, ok := ec.Get(key.(string))
 		if ok {
 			size += 1
@@ -227,7 +223,11 @@ func clearExpired() {
 		lock.Lock()
 		nearest := time.Now().Add(time.Hour)
 		for _, cache := range caches {
-			nextScan := cache.clean()
+			clearer, ok := cache.(Cleanable)
+			if !ok {
+				panic("cache must implement Clearable interface")
+			}
+			nextScan := clearer.Clean()
 			if nextScan.Before(nearest) {
 				nearest = nextScan
 			}
