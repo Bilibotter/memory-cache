@@ -18,7 +18,7 @@ Source Code See test branch benchmark_test.go
 | GoCache1000KeyReadWriteTest     |             1 |         15,894,992,600 |
 | MemoryCache1000KeyReadWriteTest |             1 |          7,810,338,800 |
 | GoCache100KeyReadWriteTest      | 1,000,000,000 |                 0.1113 |
-| MemoryCache100KeyReadWriteTest  | 1,000,000,000 |                0.06351 |
+| MemoryCache100KeyReadWriteTest  | 1,000,000,000 |                 0.0635 |
 
 ## Usage
 ```go
