@@ -8,6 +8,18 @@ It aims to provide efficient and concurrent data storage and retrieval.
 * Support setting expiration time, and use less goroutines to clean up expired cache data
 ## Installation
 go get gitee.com/MetaphysicCoding/memory-cache
+
+## Compare With go-cache
+
+Source Code See test branch benchmark_test.go
+
+| Benchmark                       |    Iterations | Time/Iteration (ns/op) |
+| ------------------------------- | ------------: | ---------------------: |
+| GoCache1000KeyReadWriteTest     |             1 |         15,894,992,600 |
+| MemoryCache1000KeyReadWriteTest |             1 |          7,810,338,800 |
+| GoCache100KeyReadWriteTest      | 1,000,000,000 |                 0.1113 |
+| MemoryCache100KeyReadWriteTest  | 1,000,000,000 |                0.06351 |
+
 ## Usage
 ```go
 import (
